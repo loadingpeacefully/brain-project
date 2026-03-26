@@ -581,7 +581,19 @@ function loadQuestionsDashboard() {
       var qs = data.questions || [];
       var inbox = document.getElementById("questions-inbox");
       var counts = document.getElementById("act-counts");
-      if (counts) counts.textContent = fmt(data.total) + " question" + (data.total !== 1 ? "s" : "") + " (" + fmt(data.high) + " high)";
+      if (counts) {
+        var catCounts = {};
+        qs.forEach(function (q) { var cat = q.category || "other"; catCounts[cat] = (catCounts[cat] || 0) + 1; });
+        var parts = [];
+        if (catCounts.evolution) parts.push(catCounts.evolution + " evolved");
+        var webTotal = (catCounts.web_enrich || 0) + (catCounts.web_conflict || 0) + (catCounts.web_new || 0);
+        if (webTotal) parts.push(webTotal + " web");
+        if (catCounts.contradiction) parts.push(catCounts.contradiction + " contradictions");
+        if (catCounts.concept_proposal) parts.push(catCounts.concept_proposal + " concepts");
+        if (catCounts.no_owner) parts.push(catCounts.no_owner + " ownership");
+        var main = fmt(data.total) + " question" + (data.total !== 1 ? "s" : "") + " (" + fmt(data.high) + " high)";
+        counts.innerHTML = parts.length ? main + '<br><span style="font-size:9px;color:var(--dim)">' + parts.join(" \u00B7 ") + '</span>' : main;
+      }
       inbox.innerHTML = "";
       if (!qs.length) { inbox.innerHTML = '<div style="padding:20px;text-align:center;color:var(--dim);font-size:11px">No pending questions. Upload a document or run Brain Cleanup.</div>'; return; }
       window._actQuestions = qs;
@@ -643,7 +655,7 @@ function buildQuestionCard(q, idx, mode) {
   var startExpanded = (mode === "hot");
   var showClarify = _clarifyCategories.includes(q.category);
 
-  var html = '<div class="qi-card qi-card-' + esc(mode) + (startExpanded ? "" : " qi-card-collapsed") + '" data-id="' + esc(q.id) + '" data-category="' + esc(q.category) + '" data-idx="' + idx + '">';
+  var html = '<div class="qi-card qi-card-' + esc(mode) + (startExpanded ? "" : " qi-card-collapsed") + '" data-id="' + esc(q.id) + '" data-category="' + esc(q.category) + '" data-priority="' + esc(q.priority || '') + '" data-idx="' + idx + '">';
 
   // Header row — clickable to toggle
   html += '<div class="qi-card-header" onclick="window.expandCard(\'' + esc(q.id) + '\')">';
@@ -776,8 +788,19 @@ window.inboxSkip = function (idx) {
 window.filterQuestions = function (f) {
   currentQFilter = f;
   document.querySelectorAll(".act-filter-btn").forEach(function (b) { b.classList.toggle("active", b.dataset.f === f); });
+  var webCats = ["web_enrich", "web_conflict", "web_new", "web"];
+  var compressCats = ["compress", "isolated"];
   document.querySelectorAll("[data-idx]").forEach(function (item) {
-    item.classList.toggle("hidden", f !== "all" && item.dataset.priority !== f && item.dataset.category !== f);
+    if (f === "all") { item.classList.remove("hidden"); return; }
+    var cat = item.dataset.category || "";
+    var pri = item.dataset.priority || "";
+    var show = false;
+    if (f === "high") show = (pri === "high");
+    else if (f === "med") show = (pri === "medium");
+    else if (f === "web") show = webCats.indexOf(cat) >= 0;
+    else if (f === "compress") show = compressCats.indexOf(cat) >= 0;
+    else show = (cat === f);
+    item.classList.toggle("hidden", !show);
   });
 };
 

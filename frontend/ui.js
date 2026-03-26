@@ -84,7 +84,7 @@ window.switchBrain = function(brainId) {
 };
 
 window.createNewBrain = function() {
-  var label = prompt("Brain name (e.g. 'Kairos Build'):");
+  var label = prompt("Brain name (e.g. 'My Project'):");
   if (!label) return;
   var id = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").substring(0, 40);
   if (!id || id.length < 3) { alert("Name too short (min 3 chars)"); return; }

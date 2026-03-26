@@ -1,0 +1,15 @@
+venv/
+.crg-venv/
+__pycache__/
+*.pyc
+.env
+data/
+.claude/
+CLAUDE_AUDIT.md
+*.npy
+*.egg-info/
+.DS_Store
+/tmp/
+code-review-graph-main/
+.mcp.json
+START_HERE.md

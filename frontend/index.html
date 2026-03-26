@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brain</title>
+<link rel="stylesheet" href="/static/styles.css?v=58">
+</head>
+<body>
+<div id="shell">
+  <div id="left">
+    <div id="lhead">
+      <div class="logo"><div class="pulse"></div><span>BRAIN</span></div>
+      <div id="brain-selector">
+        <select id="brain-select" onchange="switchBrain(this.value)"></select>
+        <button id="brain-new-btn" onclick="createNewBrain()" title="New brain">+</button>
+      </div>
+      <div id="health-score-bar">
+        <span id="hs-number">--</span>
+        <span id="hs-grade">--</span>
+        <span id="hs-delta"></span>
+        <button id="hs-info-btn" onclick="toggleHealthInfo()" title="How is this calculated?">&#8505;</button>
+      </div>
+      <div id="brain-stats">
+        <span>nodes <b id="stat-n">0</b></span>
+        <span>edges <b id="stat-e">0</b></span>
+      </div>
+    </div>
+    <div id="hs-info-panel" style="display:none"></div>
+    <div id="node-search-bar">
+      <input type="text" id="node-search-input" placeholder="Search nodes&hellip;" oninput="Brain.searchNodes(this.value)" onkeydown="if(event.key==='Escape'){this.value='';Brain.searchNodes('');}">
+      <span id="node-search-clear" onclick="clearNodeSearch()" style="display:none">&times;</span>
+      <span id="node-search-count"></span>
+    </div>
+    <div id="mode-tabs">
+      <button class="mode-tab active" data-mode="feed" onclick="switchMode('feed')">Feed</button>
+      <button class="mode-tab" data-mode="think" onclick="switchMode('think')">Think</button>
+      <button class="mode-tab" data-mode="act" onclick="switchMode('act')">Act<span id="act-badge" style="display:none"></span></button>
+      <button class="mode-tab" data-mode="chat" onclick="switchMode('chat')">Chat</button>
+      <button class="mode-tab" data-mode="observatory" onclick="switchMode('observatory')">Observatory</button>
+    </div>
+    <div id="mode-feed" class="mode-panel active">
+      <div id="upload-area" onclick="document.getElementById('file-input').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event)">
+        <div class="upload-icon">&#8853;</div>
+        <div class="upload-title">Drop a document</div>
+        <div class="upload-sub">PDF &middot; MD &middot; TXT &middot; DOCX &middot; multiple files &middot; 50MB</div>
+      </div>
+      <input type="file" id="file-input" accept=".txt,.md,.pdf,.docx,.doc,.csv" multiple onchange="handleFileInput(this)">
+      <div id="docs-list"></div>
+      <div id="processing"><div class="spin"></div><span id="proc-text">Reading...</span></div>
+      <div id="feed-qa"></div>
+    </div>
+    <div id="mode-think" class="mode-panel">
+      <div class="think-section" id="ts-evolve">
+        <div class="think-section-hd" onclick="toggleThinkSection('ts-evolve')">
+          <span class="think-section-icon">&#9678;</span>
+          <span class="think-section-title">Evolve</span>
+          <span class="think-section-sub" id="ts-evolve-sub">Background learning</span>
+          <span class="think-section-chevron">&#9662;</span>
+        </div>
+        <div class="think-section-body">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:10px;color:var(--dim);flex-shrink:0">Run for</span>
+            <div id="evolve-preset-group" style="display:flex;gap:4px">
+              <button class="evolve-preset" data-min="1" onclick="selectEvolveDuration(1)">1 min</button>
+              <button class="evolve-preset active" data-min="2" onclick="selectEvolveDuration(2)">2 min</button>
+              <button class="evolve-preset" data-min="5" onclick="selectEvolveDuration(5)">5 min</button>
+              <button class="evolve-preset" data-min="10" onclick="selectEvolveDuration(10)">10 min</button>
+            </div>
+            <span id="evolve-cycles-hint" style="font-size:9px;color:var(--dim);font-family:monospace">~3 cycles</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:10px;color:var(--dim);flex-shrink:0;width:44px">Depth</span>
+            <select id="think-evo-intensity" class="evolve-intensity-select">
+              <option value="light">Light &mdash; enrich descriptions only</option>
+              <option value="medium" selected>Medium &mdash; enrich + find new links</option>
+              <option value="full">Full &mdash; enrich + links + merge candidates</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button id="think-evo-start" onclick="startTimedEvolution()" class="think-evo-start-btn">&#9654; Start Evolution</button>
+            <button id="think-evo-stop" onclick="stopEvolution()" class="think-evo-stop-btn" style="display:none">&#9632; Stop</button>
+          </div>
+          <div id="think-evo-progress" style="display:none">
+            <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:10px;font-family:monospace">
+              <span id="think-evo-timer" style="color:var(--outcome)">0:00</span>
+              <span id="think-evo-cycle-count" style="color:var(--dim)">Cycle 1</span>
+            </div>
+            <div id="think-evo-bar-wrap"><div id="think-evo-bar"></div></div>
+            <div id="think-evo-current-step" style="font-size:10px;color:var(--dim);margin-top:5px;font-family:monospace">Initialising&hellip;</div>
+          </div>
+          <div id="evolve-log"></div>
+          <div id="evolution-diff-panel" style="display:none">
+            <div id="evolution-diff-header"><span>&#9678; Complete</span><span id="evo-diff-elapsed" style="color:var(--dim);font-size:9px"></span><button onclick="document.getElementById('evolution-diff-panel').style.display='none'" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px">&times;</button></div>
+            <div id="evolution-diff-body" style="max-height:220px;overflow-y:auto"></div>
+          </div>
+        </div>
+      </div>
+      <div class="think-section" id="ts-cleanup">
+        <div class="think-section-hd" onclick="toggleThinkSection('ts-cleanup')">
+          <span class="think-section-icon">&#11045;</span>
+          <span class="think-section-title">Brain Cleanup</span>
+          <span class="think-section-sub">7-agent audit</span>
+          <span class="think-section-chevron">&#9662;</span>
+        </div>
+        <div class="think-section-body">
+          <button id="health-btn" onclick="runBrainHealth()" class="think-primary-btn">Run Brain Cleanup</button>
+          <div id="health-status"></div>
+          <div id="think-running" style="display:none">
+            <div id="think-progress-bar-wrap"><div id="think-progress-bar"></div></div>
+            <div id="think-agent-label"></div>
+          </div>
+          <div id="think-log"></div>
+          <div id="think-result" style="display:none">
+            <div id="tr-header"><span id="tr-title">Brain Cleanup Complete</span><span id="tr-time"></span></div>
+            <div class="tr-section" id="tr-fixed" style="display:none"><div class="tr-section-label tr-label-good">Fixed automatically</div><div id="tr-fixed-items"></div></div>
+            <div class="tr-section" id="tr-attention" style="display:none"><div class="tr-section-label tr-label-warn">Needs your attention</div><div id="tr-attention-items"></div></div>
+            <div id="tr-act-cta" style="display:none"><button onclick="switchMode('act')" id="tr-act-btn">&#10132; <span id="tr-act-count"></span> new questions in Act</button></div>
+            <div id="tr-details-toggle" onclick="toggleAgentDetails()">See what each agent found</div>
+            <div id="tr-agent-details" style="display:none"></div>
+          </div>
+        </div>
+      </div>
+      <div class="think-section" id="ts-summaries">
+        <div class="think-section-hd" onclick="toggleThinkSection('ts-summaries')">
+          <span class="think-section-icon">&#9672;</span>
+          <span class="think-section-title">Node Summaries</span>
+          <span id="ts-summaries-badge" class="think-section-sub">checking&hellip;</span>
+          <span class="think-section-chevron">&#9662;</span>
+        </div>
+        <div class="think-section-body">
+          <div id="summary-status-rows"></div>
+          <button id="summary-regen-btn" onclick="startStaleSummaryRegen()" class="think-secondary-btn" style="display:none">&#8635; Update stale summaries</button>
+          <div id="summary-regen-status" style="font-size:10px;color:var(--dim);font-family:monospace"></div>
+          <div id="summary-regen-actions" style="display:none">
+            <div id="summary-regen-preview"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button onclick="saveAllSummaries(window._allGeneratedSummaries)" class="think-save-btn">&#10003; Save</button>
+              <button onclick="discardAllSummaries()" class="think-discard-btn">Discard</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="mode-act" class="mode-panel">
+      <div id="act-header">
+        <div id="act-counts"></div>
+        <button class="act-filter-btn active" data-f="all" onclick="filterQuestions('all')">All</button>
+        <button class="act-filter-btn" data-f="high" onclick="filterQuestions('high')">High</button>
+        <button class="act-filter-btn" data-f="medium" onclick="filterQuestions('medium')">Med</button>
+        <button class="act-filter-btn" data-f="contradiction" onclick="filterQuestions('contradiction')">Contradictions</button>
+        <button class="act-filter-btn" data-f="no_source" onclick="filterQuestions('no_source')">No source</button>
+        <button class="act-filter-btn" data-f="web_conflict" onclick="filterQuestions('web_conflict')">&#9889; Web</button>
+        <button class="act-filter-btn" data-f="compress" onclick="filterQuestions('compress')">&#9678; Compress</button>
+        <button class="act-filter-btn" data-f="evolution" onclick="filterQuestions('evolution')">&#9678; Evolved</button>
+        <button class="act-filter-btn" data-f="concept_proposal" onclick="filterQuestions('concept_proposal')">&#9670; Concept</button>
+      </div>
+      <div id="questions-inbox"></div>
+    </div>
+    <div id="mode-chat" class="mode-panel">
+      <div id="chat-divider"><span>Ask the brain</span></div>
+      <div id="chat-web-bar">
+        <button id="web-toggle" onclick="toggleWebSearch()" title="Search web for graph enrichment">
+          <span id="web-toggle-icon">&#8853;</span>
+          <span id="web-toggle-label">Web enrichment</span>
+        </button>
+        <span id="web-toggle-hint">Searches web, sends findings to Act</span>
+      </div>
+      <div id="chat-history"></div>
+      <div id="chat-input-row">
+        <input type="text" id="chat-input" placeholder="What caused the churn reduction? Which features did Suneet build?..." onkeydown="if(event.key==='Enter') sendBrainQuery()">
+        <button id="chat-send" onclick="sendBrainQuery()">&#8594;</button>
+      </div>
+    </div>
+    <div id="mode-observatory" class="mode-panel">
+      <div id="observatory-grid" class="observatory-grid"></div>
+    </div>
+  </div>
+  <div id="resize-handle"></div>
+  <div id="right">
+    <div id="graph-hint">Graph builds as you answer &middot; drag to explore &middot; click to inspect</div>
+    <svg id="graph-svg"></svg>
+    <div id="node-panel">
+      <div id="np-sticky-header">
+        <button id="node-panel-close" onclick="closeNodePanel()">&times;</button>
+        <div id="np-badge" class="np-badge"></div>
+        <div id="np-name" class="np-name"></div>
+        <div id="np-where" class="np-where"></div>
+      </div>
+      <div id="np-desc" class="np-desc"></div>
+      <div id="np-metrics"></div>
+      <div id="np-connections"></div>
+    </div>
+    <div id="graph-controls">
+      <button class="gc-btn" onclick="Brain.zoomIn()">+</button>
+      <button class="gc-btn" onclick="Brain.zoomFit()">&#8865;</button>
+      <button class="gc-btn" onclick="Brain.zoomOut()">&minus;</button>
+      <button class="gc-btn" onclick="Brain.rearrange()" title="Rearrange graph">&#10227;</button>
+    </div>
+    <div id="legend">
+      <div class="legend-section-hd">NODES</div>
+      <div id="legend-node-filters"></div>
+      <div class="legend-section-hd" style="margin-top:10px">EDGES</div>
+      <div class="legend-edge-row"><span class="legend-edge-line causal"></span><span class="legend-edge-label">Causal</span></div>
+      <div class="legend-edge-row"><span class="legend-edge-line structural"></span><span class="legend-edge-label">Structural</span></div>
+    </div>
+    <div id="ntip"><b id="ntip-name"></b><span id="ntip-type"></span><em id="ntip-where"></em></div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/graphology/0.26.0/graphology.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/graphology-library@0.8.0/dist/graphology-library.min.js"></script>
+<script src="/static/graph.js?v=58"></script>
+<div id="cost-float-btn" onclick="toggleCostPanel()">
+  <div id="cost-float-dot"></div>
+  <span id="cost-float-total">$0.00</span>
+</div>
+<div id="cost-side-panel">
+  <div id="cost-side-header"><span>API Usage</span><span id="cost-side-total"></span><button onclick="toggleCostPanel()">&times;</button></div>
+  <div id="cost-side-body">
+    <div id="cost-side-stats"></div>
+    <div id="cost-side-log-list"></div>
+  </div>
+</div>
+<script src="/static/ui.js?v=58"></script>
+</body>
+</html>

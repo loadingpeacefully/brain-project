@@ -320,6 +320,56 @@ async def task_find_merges(brain):
         return person_ops
 
 
+async def task_web_enrich(brain, priority):
+    """Enrich high-priority nodes from web during evolution. Cost-gated."""
+    from web_enricher import enrich_brain_from_web
+    from storage import add_question_safe
+
+    nm = {n["id"]: n for n in brain.get("nodes", [])}
+
+    # Pick nodes that benefit most from web context
+    candidates = []
+    for p in priority[:30]:
+        node = nm.get(p["node_id"])
+        if not node:
+            continue
+        ntype = node.get("type", "")
+        conf = node.get("confidence_score", 0)
+
+        if ntype == "Person" and conf < 0.7:
+            label = node.get("label", "")
+            company = node.get("company", "")
+            candidates.append({"node": node, "query": f"{label} {company} role background"})
+        elif ntype == "Company" and conf < 0.7:
+            label = node.get("label", "")
+            candidates.append({"node": node, "query": f"{label} company product funding"})
+        elif ntype == "Outcome" and node.get("metrics"):
+            label = node.get("label", "")
+            company = node.get("company", "")
+            candidates.append({"node": node, "query": f"{company} {label}"})
+
+        if len(candidates) >= 3:  # cost gate: ~$0.60/cycle max
+            break
+
+    if not candidates:
+        return []
+
+    questions_added = 0
+    for c in candidates:
+        try:
+            result = enrich_brain_from_web(c["query"], brain)
+            for q in result.get("questions", []):
+                if add_question_safe(brain, q, "evolution_web"):
+                    questions_added += 1
+        except Exception as e:
+            print(f"[evolution/web] Failed for '{c['query']}': {e}")
+
+    if questions_added > 0:
+        return [{"op": "web_enrich_summary", "questions_added": questions_added,
+                 "nodes_searched": len(candidates), "safe": False, "auto_apply": False}]
+    return []
+
+
 def apply_safe_ops(brain, ops):
     from storage import touch_node
     changes = []
@@ -435,6 +485,19 @@ async def _run_inner(intensity) -> AsyncGenerator:
         all_ops.extend(merge_ops)
         yield {"type": "step_done", "step": "merges", "found": len(merge_ops),
                "auto_apply": 0, "needs_review": len(merge_ops)}
+
+    # Web enrichment (full only)
+    if intensity == "full":
+        yield {"type": "step", "step": "web_enrich", "label": "Searching web for node enrichment"}
+        try:
+            web_ops = await task_web_enrich(brain, priority)
+            web_q = web_ops[0]["questions_added"] if web_ops else 0
+            yield {"type": "step_done", "step": "web_enrich",
+                   "found": web_q, "auto_apply": 0, "needs_review": web_q}
+        except Exception as e:
+            print(f"[evolution] web_enrich failed: {e}")
+            yield {"type": "step_done", "step": "web_enrich",
+                   "found": 0, "auto_apply": 0, "needs_review": 0}
 
     # Apply
     yield {"type": "step", "step": "apply", "label": "Applying safe changes"}

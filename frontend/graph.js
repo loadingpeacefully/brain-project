@@ -474,11 +474,29 @@ var Brain = Brain || {};
       if (sid === d.id) connected[tid] = true;
       if (tid === d.id) connected[sid] = true;
     });
-    nodeSel.style("opacity", function (n) { return connected[n.id] ? 1 : 0.07; });
+    // Trace downstream causal chain (CCP blast radius)
+    var causalDown = {};
+    function traceCausal(nid, depth) {
+      if (depth > 4 || causalDown[nid] !== undefined) return;
+      causalDown[nid] = depth;
+      brainLinks.forEach(function (l) {
+        var sid = typeof l.source === "object" ? l.source.id : l.source;
+        var tid = typeof l.target === "object" ? l.target.id : l.target;
+        if (l.causal && sid === nid) traceCausal(tid, depth + 1);
+      });
+    }
+    traceCausal(d.id, 0);
+    nodeSel.style("opacity", function (n) {
+      if (n.id === d.id) return 1.0;
+      if (causalDown[n.id] !== undefined) return Math.max(0.4, 1.0 - causalDown[n.id] * 0.2);
+      if (connected[n.id]) return 0.8;
+      return 0.07;
+    });
     edgeSel.style("opacity", function (l) {
       var sid = typeof l.source === "object" ? l.source.id : l.source;
       var tid = typeof l.target === "object" ? l.target.id : l.target;
       if (sid === d.id || tid === d.id) return 1.0;
+      if (l.causal && causalDown[sid] !== undefined) return 0.8;
       return l.causal ? 0.15 : 0.03;
     });
     B.applyTypeFilter(); // re-apply type filter on top of selection

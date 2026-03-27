@@ -1410,6 +1410,28 @@ def backfill_memory_type():
             "total_nodes": len(brain.get("nodes", []))}
 
 
+@app.post("/api/brain/propagate-test")
+def propagate_test(node_id: str, new_confidence: float):
+    """Test CCP: manually set a node's confidence and see propagation."""
+    from storage import propagate_confidence, find_node, touch_node
+    brain = load_brain()
+    node = find_node(brain, node_id)
+    if not node:
+        raise HTTPException(404, f"Node '{node_id}' not found")
+    old_conf = node.get("confidence_score", 0.3)
+    node["confidence_score"] = round(max(0.05, min(1.0, new_confidence)), 3)
+    touch_node(node)
+    updates = propagate_confidence(brain, node_id, old_conf, new_confidence)
+    save_brain(brain)
+    return {
+        "node": node.get("label"),
+        "old_confidence": old_conf,
+        "new_confidence": new_confidence,
+        "propagation": updates,
+        "nodes_affected": len(updates)
+    }
+
+
 @app.post("/api/brain/infer-ownership")
 def infer_ownership():
     """Infer owners for unowned Feature nodes. Batches of 10, max 50."""

@@ -603,6 +603,10 @@ def update_confidence_from_answer(brain: dict, question: dict, answer: str) -> l
             touch_node(node)
             updates.append(f"Contradiction resolved: {node['label']}")
 
+    # Causal Confidence Propagation — ripple through downstream causal chain
+    ccp_updates = propagate_confidence(brain, context_id, current, node.get("confidence_score", current))
+    updates.extend(ccp_updates)
+
     # Check graduation after any confidence change
     if maybe_graduate_node(node):
         updates.append(f"Graduated to semantic: {node['label']}")
@@ -632,6 +636,55 @@ def maybe_graduate_node(node: dict) -> bool:
         node["graduated_at"] = now_iso()
         touch_node(node)
     return graduated
+
+
+def propagate_confidence(brain: dict, source_id: str, old_conf: float, new_conf: float) -> list:
+    """Causal Confidence Propagation (CCP).
+    When a node's confidence changes significantly, propagate proportionally
+    through outgoing causal edges. Dampen with distance. Bad news ripples
+    strongly; good news needs strong evidence to ripple."""
+    delta = new_conf - old_conf
+    if delta > 0 and delta < 0.15:
+        return []  # Small boosts don't ripple
+    if abs(delta) < 0.03:
+        return []  # Tiny changes ignored
+
+    ratio = new_conf / max(old_conf, 0.05)
+    updates = []
+    visited = set()
+
+    def _propagate(nid, depth, cumulative_ratio):
+        if depth > 4 or nid in visited:
+            return
+        visited.add(nid)
+        for link in brain.get("links", []):
+            if not link.get("causal"):
+                continue
+            if link.get("source") != nid:
+                continue
+            target_id = link.get("target", "")
+            if target_id in visited:
+                continue
+            target = find_node(brain, target_id)
+            if not target:
+                continue
+            dampen = 0.5 ** depth
+            effective_ratio = 1.0 + (cumulative_ratio - 1.0) * dampen
+            old_target_conf = target.get("confidence_score", 0.3)
+            new_target_conf = round(max(0.05, min(1.0, old_target_conf * effective_ratio)), 3)
+            if abs(new_target_conf - old_target_conf) >= 0.01:
+                target["confidence_score"] = new_target_conf
+                touch_node(target)
+                direction = "+" if new_target_conf > old_target_conf else ""
+                updates.append(
+                    f"CCP: {target.get('label', '')} "
+                    f"{old_target_conf:.2f}->{new_target_conf:.2f} "
+                    f"(depth {depth}, {direction}{(effective_ratio - 1) * 100:.0f}%)"
+                )
+                _propagate(target_id, depth + 1, effective_ratio)
+
+    _propagate(source_id, 1, ratio)
+    return updates
 
 
 def compute_health_score(brain: dict) -> dict:
